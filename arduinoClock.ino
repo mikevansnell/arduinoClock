@@ -24,16 +24,16 @@
 using namespace ace_button;
 
 // PIN ASSIGNMENTS
-#define BTN_SET       5
-#define BTN_SET_ALARM 6
-#define BTN_MINUS     7
-#define BTN_PLUS      8
-#define BTN_SNOOZ     9
+#define BTN_SET       9
+#define BTN_SET_ALARM 8
+#define BTN_MINUS     5
+#define BTN_PLUS      6
+#define BTN_SNOOZ     7
 
 #define DISP_CLK      3
 #define DISP_DIO      4
-#define PM_LED        13
-#define PIEZO          2 
+#define PM_LED        10
+#define PIEZO         2 
 
 // UI TIMING CHARACTERISTICS
 #define TEST_DELAY 200
@@ -78,6 +78,7 @@ DateTime alarmTime;
 volatile bool isAlarmSet = true;
 volatile int fastTimeDirection = 0;
 unsigned long lastFastTimeTick = 0;
+volatile byte brightness = 0x7;     // brightness values 0x1..0x7
 
 
 /**  FROM https://www.mcielectronics.cl/website_MCI/static/documents/Datasheet_TM1637.pdf
@@ -143,7 +144,7 @@ void setup() {
   pinMode(BTN_SNOOZ, INPUT_PULLUP);
   pinMode(PM_LED, OUTPUT);
 
-  display.setBrightness(0x0a); // seems to work well on my unit...
+  display.setBrightness(brightness); 
 
   if (! rtc.begin()) {
     Serial.println("Couldn't find RTC");
@@ -321,7 +322,8 @@ void showCurrentTime() {
   int hourMinDec = hour * 100 + minute;
 
   bool isPM = now.hour() >= 12;
-  digitalWrite(PM_LED,isPM);
+  analogWrite(PM_LED, isPM ? ((brightness + 1) * 0x1F) : 0);
+  //digitalWrite(PM_LED,isPM);
 
   display.showNumberDecEx(hourMinDec, 0x80 >> 1, false);
 
@@ -362,6 +364,23 @@ void showSettableTime(DateTime t, bool blinkHours, bool blinkMinutes) {
   } else {
     display.showNumberDecEx(hourMinDec, 0x80 >> 1, false);
   }
+
+}
+
+void changeBrightness (byte delta) {
+  
+  brightness = brightness + delta;
+  if (brightness == 0xff) { brightness = 0x0; }
+  if (brightness > 0x7) { brightness = 0x7; }
+
+  Serial.print("Brightness ");
+  Serial.print(brightness);
+  Serial.print(", PM LED gets (0-255) ");
+  Serial.println((brightness + 1) * 0x1F);
+  
+  display.setBrightness(brightness); 
+  showCurrentTime();
+  
 
 }
 
@@ -635,6 +654,8 @@ void handleButton(AceButton* btn, uint8_t eventType, uint8_t /*buttonState*/) {
           changeAlarmTime(-1,0);
         } else if (uiState == UiState::setAlarmMinutes) {
           changeAlarmTime(0,-1);
+        } else if (uiState == UiState::run) {
+          changeBrightness(-1);
         }
       } else if (eventType == AceButton::kEventLongPressed) {
         Serial.println("fast -");
@@ -654,6 +675,8 @@ void handleButton(AceButton* btn, uint8_t eventType, uint8_t /*buttonState*/) {
           changeAlarmTime(1,0);
         } else if (uiState == UiState::setAlarmMinutes) {
           changeAlarmTime(0,1);
+        } else if (uiState == UiState::run) {
+          changeBrightness(+1);
         }
       } else if (eventType == AceButton::kEventLongPressed) {
         Serial.println("fast +");
